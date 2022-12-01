@@ -1,0 +1,171 @@
+close1=close1.to_frame()
+close2=close2.to_frame()
+close3=close3.to_frame()
+close4=close4.to_frame()
+close5=close5.to_frame()
+close6=close6.to_frame()
+
+close1=close1.rename(columns={'close':'贵州茅台'})
+close2=close2.rename(columns={'close':'隆基股份'})
+close3=close3.rename(columns={'close':'中远海控'})
+close4=close4.rename(columns={'close':'海康威视'})
+close5=close5.rename(columns={'close':'片仔癀'})
+close6=close6.rename(columns={'close':'中国石化'})
+close_sum = pd.concat([close1,close2,close3,close4,close5,close6],axis=1)
+close_sum.head()
+
+stock_base_6_df = close_sum / close_sum.iloc[0] * 1
+stock_base_6_df.plot(figsize = (10,6),cmap='plasma')
+plt.legend()
+
+gupiao = close_sum.copy()
+rets = np.log( gupiao / gupiao.shift(1) ).dropna()
+
+gupiao = close_sum.copy()
+rets = np.log( gupiao / gupiao.shift(1) ).dropna()
+
+rets.cumsum().plot(figsize = (10,6), cmap='plasma')
+
+#histogram for annual return
+plt.rcParams['font.family']=['DengXian']
+rets.hist(bins=40, figsize=(10, 10),color='deeppink')
+
+#calculate annual return
+rets.mean() * 252   
+
+#calculate variance of annual return
+rets.var() * 252
+
+#calculate covariance
+rets.cov() * 252 #年化收益率协成对方差
+
+#portofolio opportunity sets
+name=['贵州茅台','隆基股份','中远海控','海康威视','片仔癀','中国石化']
+nums = len(name)
+weights = np.random.random(nums)
+weights /= np.sum(weights)
+print(weights)
+
+#the annual return and std for porfolio
+prets = np.sum((weights * rets.mean()) * 252)
+pstd = math.sqrt(np.dot(weights.T, np.dot(rets.cov() * 252, weights)))  
+weights.sum()
+def gen_prets(weights):
+    return np.sum((weights * rets.mean()) * 252)
+def gen_pstd(weights):
+    return math.sqrt(np.dot(weights.T, np.dot(rets.cov() * 252, weights)))
+
+#use monte carol generate 100,000 portfolios
+r = 0.04
+prets = []
+pstd = []
+for i in range(100000):
+    weights = np.random.random(nums)
+    weights /= np.sum(weights)
+    prets.append(gen_prets(weights))
+    pstd.append(gen_pstd(weights))
+prets = np.array(prets)
+pstd = np.array(pstd)
+
+plt.figure(figsize = (10 , 6))
+plt.scatter(pstd , prets , c = (prets) / pstd,
+            marker = 'o', cmap = 'plasma')
+plt.xlabel('expected volatility')
+plt.ylabel('expected return')
+plt.colorbar(label = 'plasma')
+
+#find the largest sharpe ratio
+import scipy.optimize as sco
+import scipy.interpolate as spi
+def mini_sharpe(weights):
+    return - gen_prets(weights) / gen_pstd(weights)
+
+cons = ({'type': 'eq','fun': lambda x: np.sum(x) - 1})  #weights = 0
+bnds = tuple((0, 1) for x in range(nums)) #0 <= wi <= 1
+eweights = np.array(nums * [1. / nums,])  
+opts = sco.minimize(mini_sharpe, eweights, method='SLSQP', bounds=bnds, constraints=cons)  #maximizing sharpe ratio
+
+gen_prets(opts['x'])
+gen_pstd(opts['x'])
+gen_prets(opts['x']) / gen_pstd(opts['x'])
+
+#minimum std for portolio
+optv = sco.minimize(gen_pstd, eweights, method='SLSQP', bounds=bnds, constraints=cons) 
+gen_prets(optv['x'])
+gen_pstd(optv['x'])
+gen_prets(optv['x']) / gen_pstd(optv['x'])
+
+#frontier under contraints
+cons = ({'type': 'eq','fun': lambda x: gen_prets(x) - fret}, # wi要使 指定的fret = 该wi下的pret
+       {'type': 'eq','fun': lambda x: np.sum(x) - 1}
+       )  
+bnds = tuple((0, 1) for x in eweights ) 
+
+#frets = np.linspace(0.26, 0.31, 50)
+frets = np.linspace(0.2, 0.375, 100)
+print(frets)
+fstd = []
+for fret in frets:
+    optf = sco.minimize(gen_pstd, eweights, method='SLSQP', bounds=bnds, constraints=cons) 
+    fstd.append(optf['fun'])
+fstd = np.array(fstd)
+fstd
+
+
+#line: efficent frontier (the best portfolios under given returns)
+#red star: maximum sharpe ratio portfolio
+#black star：std minimum portfolio
+plt.figure(figsize = (10 , 6))
+plt.scatter(pstd , prets , c = (prets) / pstd,
+            marker = '.', cmap = 'plasma')
+plt.plot(fstd , frets , 'b',color='darkviolet')
+plt.plot(gen_pstd(opts['x']), gen_prets(opts['x']),
+         'y*', markersize=15.0,color='black')
+plt.plot(gen_pstd(optv['x']), gen_prets(optv['x']),
+         'r*', markersize=15.0)
+plt.xlabel('expected volatility')
+plt.ylabel('expected return')
+plt.colorbar(label = 'Sharpe ratio')
+
+#plot CML
+ind = np.argmin(fstd)  
+fstd = fstd[ind:]     
+frets = frets[ind:]  
+tck =  spi.splrep(fstd, frets, k=3)    
+def f(x):
+    return spi.splev(x, tck , der = 0)
+def df(x):
+    return spi.splev(x, tck , der = 1)
+def equations(p):
+    equa1 = r - p[0]  #a = r
+    equa2 = r + p[1] * p[2] - f(p[2]) # a + bx = f(x)
+    equa3 = df(p[2]) - p[1]  # b = f'(x)
+    return equa1,equa2,equa3
+opt = sco.fsolve(equations, [0.04, 1.25, 0.27]) #(rf, largest sharpe ratio, the std of largest sharpe ratio)
+
+equations(opt)
+opt[0] + opt[1] * opt[2]
+
+plt.figure(figsize = (10 , 6))
+plt.scatter(pstd , prets , c = (prets - r) / pstd,
+            marker = '.', cmap = 'plasma')
+plt.plot(fstd , frets , 'b',color='darkviolet')
+x = np.linspace(0.2, 0.375, 100)
+plt.plot(x , opt[0] + opt[1] * x, 'r', lw=1.5)
+plt.plot(opt[2], f(opt[2]),'y*', markersize=15.0,color='black')
+plt.axhline(0.20, color='k', ls='--', lw=2.0)
+plt.axvline(0.25, color='k', ls='--', lw=2.0)
+plt.xlabel('expected volatility')
+plt.ylabel('expected return')
+plt.colorbar(label = 'Sharpe ratio')
+
+#get the weights for the most efficient portfolio
+cons = ({'type': 'eq', 'fun': lambda x:  gen_prets(x) - f(opt[2])},
+        {'type': 'eq', 'fun': lambda x:  np.sum(x) - 1})  
+res = sco.minimize(gen_pstd, eweights, method='SLSQP',
+                   bounds=bnds, constraints=cons)
+res['x'].round(3)
+gen_prets(res['x'])
+gen_pstd(res['x'])
+(gen_prets(res['x']) - r ) / gen_pstd(res['x'])
+print(f'The optimal weights is : {res['x'].round(3)}'
