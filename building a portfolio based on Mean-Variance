@@ -1,0 +1,232 @@
+import tushare as ts
+import matplotlib.pyplot as plt
+import numpy as np
+
+import mpl_finance as mpf
+import requests
+from bs4 import BeautifulSoup
+import traceback
+import re
+import pandas as pd
+import tushare as ts
+
+gzmt = ts.get_k_data('600519', start='2012-01-01', end='2020-12-31') 
+gzmt = gzmt.set_index(['date'])
+gzmt.index = pd.to_datetime(gzmt.index)
+
+ljgf = ts.get_k_data('601012', start='2012-01-01', end='2020-12-31')
+ljgf = ljgf.set_index(['date'])
+ljgf.index = pd.to_datetime(ljgf.index)
+
+zyhk = ts.get_k_data('601919', start='2012-01-01', end='2020-12-31')
+zyhk = zyhk.set_index(['date'])
+zyhk.index = pd.to_datetime(zyhk.index)
+
+hkws = ts.get_k_data('002415', start='2012-01-01', end='2020-12-31') 
+hkws = hkws.set_index(['date'])
+hkws.index = pd.to_datetime(hkws.index)
+
+pzh = ts.get_k_data('600436', start='2012-01-01', end='2020-12-31') 
+pzh = pzh.set_index(['date'])
+pzh.index = pd.to_datetime(pzh.index)
+
+zgsh = ts.get_k_data('600028', start='2012-01-01', end='2020-12-31') 
+zgsh = zgsh.set_index(['date'])
+zgsh.index = pd.to_datetime(zgsh.index)
+
+ def kgraph(code,df):
+    fig = plt.figure(figsize=(16,8))
+    ax = fig.add_subplot(111)
+    # load the data
+    df_ma = pd.DataFrame()
+    original_data =df.iloc[:,:4]
+    # set the trading date
+    days =len(df)
+    # get the open close high and low
+    opens = df['open'][:days]
+    closes = df['close'][:days]
+    highs = df['high'][:days]
+    lows = df['low'][:days]
+    # generate time series
+    data_index = pzh.index
+    # use zip function to generate the list
+    ohlc = list(zip(np.arange(0,len(opens)), opens, closes, highs, lows))
+    # k plot
+    mpf.candlestick2_ochl(ax, opens, closes, highs, lows, width=0.6, colorup='r', colordown='g')
+    ax.set_xlim(0,days)
+    ax.set_xticks(np.arange(0,days,120))
+    ax.set_xticklabels([data_index[index] for index in ax.get_xticks()])
+    ax.set_xlabel('date')
+    ax.set_ylabel('price')
+    ax.set_title(code)
+
+    plt.show()
+
+kgraph('600436',pzh)
+kgraph('600519',gzmt)
+kgraph('601012',ljgf)
+kgraph('601919',zyhk)
+kgraph('002415',hkws)
+kgraph('600028',zgsh)
+
+# use sz index as the benchmark
+szzz = ts.get_k_data('sh', start='2012-01-01', end='2020-12-31')
+szzz = szzz.set_index(['date'])
+#use the sz index daily return as benchmark of the expected return
+close_sz = szzz['close']
+import ffn
+ffnsimpleret_sz=ffn.to_returns(close_sz)
+ffnsimpleret_sz.name='ffnsimpleret_sz'
+ffnsimpleret_sz.head()
+cumreturn_sz = (1+ffnsimpleret_sz).cumprod()
+expect_returns = np.mean(cumreturn_sz)/len(cumreturn_sz)
+print(f'The expected return for sz is : {expected returns}')
+
+close1 = gzmt['close']
+close2 = ljgf['close']
+close3 = zyhk['close']
+close4 = hkws['close']
+close5 = pzh['close']
+close6 = zgsh['close']
+
+ffnsimpleret_gzmt=ffn.to_returns(close1)
+ffnsimpleret_gzmt.name='ffnsimpleret_gzmt'
+ffnsimpleret_gzmt.head()
+
+ffnsimpleret_ljgf=ffn.to_returns(close2)
+ffnsimpleret_ljgf.name='ffnsimpleret_ljgf'
+ffnsimpleret_ljgf.head()
+
+ffnsimpleret_zyhk=ffn.to_returns(close3)
+ffnsimpleret_zyhk.name='ffnsimpleret_zyhk'
+ffnsimpleret_zyhk.head()
+
+ffnsimpleret_hkws=ffn.to_returns(close4)
+ffnsimpleret_hkws.name='ffnsimpleret_hkws'
+ffnsimpleret_hkws.head()
+
+ffnsimpleret_pzh=ffn.to_returns(close5)
+ffnsimpleret_pzh.name='ffnsimpleret_pzh'
+ffnsimpleret_pzh.head()
+
+ffnsimpleret_zgsh=ffn.to_returns(close6)
+ffnsimpleret_zgsh.name='ffnsimpleret_zgsh'
+ffnsimpleret_zgsh.head()
+#use ffn to return to calculate the simple return
+# and combine the simple return together
+sh_return = pd.concat([ffnsimpleret_gzmt,ffnsimpleret_ljgf,ffnsimpleret_zyhk,ffnsimpleret_hkws,ffnsimpleret_pzh,ffnsimpleret_zgsh],axis=1)
+
+import matplotlib
+import matplotlib.pyplot as plt
+matplotlib.use('TkAgg')
+%matplotlib inline
+sh_return.plot()
+plt.title('Daily Return of 6 stocks')
+plt.legend(loc='lower center', bbox_to_anchor = (0.5,-0.3),ncol=6,fancybox = True, shadow = True )
+sh_return = sh_return.dropna()
+cumreturn = (1+sh_return).cumprod()
+cumreturn.plot()
+plt.title('Cumlative Daily Return of 6 stocks')
+# plot the graph of cumulative return
+
+#calculate the correlation between the stocks, based on the benchmark of 0.5
+print(sh_return.corr())
+
+from scipy import linalg
+import numpy as np
+class MeanVariance:
+    def __init__(self,returns):
+        self.returns = returns
+   
+    def minVar(self,goalRet):
+        covs = np.array(self.returns.cov())
+        means = np.array(self.returns.mean())
+        L1 = np.append(np.append(covs.swapaxes(0,1),[means],axis=0),[np.ones(len(means))],axis=0).swapaxes(0,1)
+        L2 = list(np.ones(len(means)))
+        L2.extend([0,0])
+        L3 = list(means)
+        L3.extend([0,0])
+        L4 = np.array([L2,L3])
+        L = np.append(L1,L4,0)
+        results = linalg.solve(L,np.append(np.zeros(len(means)),[1,goalRet],0))
+        return (np.array([list(self.returns.columns), results[:-2]]))
+    
+    def frontierCurve(self):
+        goals = [x/500000 for x in range(-100,4000)]
+        variances = list(map(lambda x: self.calVar(self.minVar(x)[1,:].astype(np.float)),goals))
+        plt.plot(variances,goals)
+    
+
+    def meanRet(self,fracs):
+        meanRisky = ffn.to_returns(self.returns).mean()
+        assert len(meanRisky) == len(fracs), 'length of fractions must be equal to number of assets'
+        return (np.sum(np.multiply(meanRisky,np.array(fracs))))
+
+    def calVar(self,fracs):
+        return (np.dot(np.dot(fracs,self.returns.cov()),fracs))
+       
+      
+minVar = MeanVariance(sh_return)
+minVar.frontierCurve()
+
+sh_return = sh_return.reset_index()
+sh_return = sh_return.rename(columns={'date': 'Date'})
+sh_return = sh_return.set_index('Date')
+sh_return.index=pd.to_datetime(sh_return.index)
+
+train_set = sh_return['2012']
+i = 2013
+while i < 2017:
+    train_seti = sh_return[str(i)]
+    train_set = pd.concat([train_set,train_seti],axis = 0)
+    i = i+1
+print(train_set)
+
+j=2018
+test_set = sh_return['2017']
+while j < 2021:
+    test_setj = sh_return[str(j)]
+    test_set = pd.concat([test_set,test_setj],axis = 0)
+    j=j+1
+print(test_set)
+#use the data from 2012-2016 as the train set 2017-2020 as the test set
+
+varMinimizer = MeanVariance(train_set)
+goal_return = 0.001 
+portfolio_weight = varMinimizer.minVar(goal_return)
+print(f'The portfolio weight(based on Markowitz Mean-Variance Model is : {portfolio_weight}')
+
+import math
+def gen_prets(weights):
+    return np.sum((weights*sh_return.mean())*250)
+
+def gen_pstd(weights):
+    return math.sqrt(np.dot(weights.T,np.dot(sh_return.cov() * 250, weights)))
+   
+weights = portfolio_weight[1].astype(np.float)
+gen_pstd(weights)
+gen_prets(weights)  #annual return
+
+# calculate the return for test set
+test_return = np.dot(test_set,np.array([portfolio_weight[1,:].astype(np.float)]).swapaxes(0,1))#最优权重运用在测试集上
+test_return = pd.DataFrame(test_return,index = test_set.index)
+test_cum_return = (1+test_return).cumprod() #cummulative return
+
+#randomly set propotion for the portfolio
+sim_weight = np.random.uniform(0,1,(test_set.shape[0],test_set.shape[1]))
+sim_weight = np.apply_along_axis(lambda x:x/sum(x),1,sim_weight)
+
+#simple return and cummulative return for random groups
+sim_return = np.dot(test_set,sim_weight.swapaxes(0,1))
+sim_return = pd.DataFrame(sim_return,index = test_cum_return.index)
+sim_cum_return = (1+sim_return).cumprod()
+
+print(test_return)
+
+#plot the graph
+matplotlib.use('TkAgg')
+%matplotlib inline
+sim_cum = sim_cum_return.values
+test_cum = test_cum_return.values
+plt.plot(sim_cum_return.index,sim_cum,color = 'Yellow' )
+plt.plot(test_cum_return.index,test_cum)
